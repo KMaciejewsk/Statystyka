@@ -1,0 +1,248 @@
+---
+title: "Analiza danych - filmy Tarantino"
+author: "Konrad Maciejewski"
+date: "2023-06-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r, include=FALSE}
+data <- read.csv("C:\\Users\\konra\\Downloads\\tarantino.csv")
+```
+
+## Opis zbioru
+
+Dane są pobrane z repozytorium na GitHubie https://github.com/fivethirtyeight/data/tree/master/tarantino. Są to dane z obserwacji i dotyczą ilości poszczególnych przekleństw oraz śmierci w wybranych filmach reżyserowanych przez Quentina Tarantino.
+
+## Analiza eksploracyjna
+
+Dwa przedstawione poniżej wykresy pokazują czas i ilość występowania śmierci bohaterów oraz przekleństw w poszczególnych filmach:
+
+```{r, echo=FALSE}
+death_data <- subset(data, type == "death")
+ggplot(death_data, aes(x = minutes_in, y = 1)) +
+  geom_point() +
+  labs(x = "Minuta filmu", y = "Śmierci") +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+  facet_wrap(~ movie, ncol = 1)
+
+word_data <- subset(data, type == "word")
+ggplot(word_data, aes(x = minutes_in, y = 1)) +
+  geom_point() +
+  labs(x = "Minuta filmu", y = "Przekleństwa") +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
+  facet_wrap(~ movie, ncol = 1)
+```
+
+Trzeba zauważyć, że z wykresami są jednak problemy – jeżeli wiele bohaterów umiera w bardzo krótkim czasie, albo jeśli ktoś puści wiązankę, na wykresie widać tylko jeden punkt. Dla przykładu, z wykresu wynika, że w filmie „Kill Bill: Vol. 2” umierają tylko trzy osoby, kiedy w rzeczywistości ginie jedenaście.
+
+Kolejnym problemem są różne czasy trwania filmów. Patrząc na wykres, można by (niepoprawnie) wywnioskować, że w filmie „Reservoir Dogs” około setnej minuty bohaterzy przechodzą przemianę i przestają przeklinać. Oczywiście nie dzieje się tak, tylko kończy się film. Poniższa tabela opisuje dokładne wartości danych w celu sprawniejszej interpretacji:
+
+```{r, echo=FALSE}
+death_data <- subset(data, type == "word")
+death_counts <- aggregate(type ~ movie, data = death_data, FUN = length)
+max_time <- aggregate(minutes_in ~ movie, data = data, FUN = max)
+merged_data <- merge(death_counts, max_time, by = "movie")
+merged_data$deaths_per_minute <- merged_data$type / merged_data$minutes_in
+colnames(merged_data) <- c("Film", "Przekleństwa", "Czas trwania", "Częstotliwość")
+sorted_data <- merged_data[order(-merged_data$Częstotliwość), ]
+mean_words <- mean(sorted_data$Przekleństwa)
+sd_words <- sd(sorted_data$Przekleństwa)
+print(sorted_data, row.names = FALSE)
+cat("Średnia ilość przekleństw:", mean_words, "\n")
+cat("Odchylenie standardowe ilości przekleństw:", sd_words, "\n")
+```
+```{r, echo=FALSE}
+death_data <- subset(data, type == "death")
+death_counts <- aggregate(type ~ movie, data = death_data, FUN = length)
+max_time <- aggregate(minutes_in ~ movie, data = data, FUN = max)
+merged_data <- merge(death_counts, max_time, by = "movie")
+merged_data$deaths_per_minute <- merged_data$type / merged_data$minutes_in
+colnames(merged_data) <- c("Film", "Śmierci", "Czas trwania", "Częstotliwość")
+sorted_data <- merged_data[order(-merged_data$Częstotliwość), ]
+mean_deaths <- mean(sorted_data$Śmierci)
+sd_deaths <- sd(sorted_data$Śmierci)
+print(sorted_data, row.names = FALSE)
+cat("Średnia ilość śmierci:", mean_deaths, "\n")
+cat("Odchylenie standardowe ilości śmierci:", sd_deaths, "\n")
+```
+
+W tabeli kolumna „Czas trwania” nie jest rzeczywistym czasem trwania filmu, tylko ostatnim wystąpieniem przekleństwa/śmierci. Nie stanowi to jednak istotnej różnicy w przypadku większości filmów. Tarantino lubi kończyć swoje filmy czyjąś śmiercią, a bohaterzy przeklinają nieustannie. Największą różnicą pomiędzy rzeczywistym czasem trwania, a tym z tabelki jest 11 minut dla filmu „Kill Bill: Vol. 1”. Nie zmienia to jednak kolejności po posortowaniu. Kolumna „Częstotliwość” jest wynikiem podzielenia drugiej kolumny przez trzecią.
+
+Poniższe wykresy zostały przeskalowane według kolumny „Czas trwania” do skali (0-1: od początku do końca filmu) na osi X:
+
+```{r, echo=FALSE}
+death_data <- subset(data, type == "death")
+max_minutes <- death_data %>%
+  group_by(movie) %>%
+  summarize(max_minutes_in = max(minutes_in))
+death_data <- death_data %>%
+  left_join(max_minutes, by = "movie") %>%
+  mutate(scaled_minutes_in = minutes_in / max_minutes_in)
+ggplot(death_data, aes(x = scaled_minutes_in, y = 1)) +
+  geom_point() +
+  labs(x = "Czas trwania fimlu [0-1]", y = "Śmierci") +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  facet_wrap(~ movie, ncol = 1)
+word_data <- subset(data, type == "word")
+max_minutes <- word_data %>%
+  group_by(movie) %>%
+  summarize(max_minutes_in = max(minutes_in))
+word_data <- word_data %>%
+  left_join(max_minutes, by = "movie") %>%
+  mutate(scaled_minutes_in = minutes_in / max_minutes_in)
+ggplot(word_data, aes(x = scaled_minutes_in, y = 1)) +
+  geom_point() +
+  labs(x = "Czas trwania fimlu [0-1]", y = "Przekleństwa") +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  facet_wrap(~ movie, ncol = 1)
+```
+
+Warto zauważyć, że analizując te wykresy można wyodrębnić poszczególne akty filmów.
+
+Dodatkowo, kolejny wykres przedswaia ile razy padło każde przekleństwo:
+
+```{r, echo=FALSE}
+data_count <- data %>%
+  filter(type == "word") %>%
+  group_by(word) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+ggplot(data_count, aes(x = reorder(word, -count), y = count)) +
+  geom_col(fill = "steelblue") +
+  labs(x = "Przekleństwo", y = "Ilość użyć") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Hipoteza 1: "Im więcej przekleństw w filmie, tym więcej śmierci."
+
+Poniżej przedstawiona tabela pokazuje ilości przekleństw i śmierci w filmach:
+
+```{r, echo=FALSE}
+death_data <- subset(data, type == "death")
+word_data <- subset(data, type == "word") 
+death_counts <- aggregate(type ~ movie, data = death_data, FUN = length)
+word_counts <- aggregate(type ~ movie, data = word_data, FUN = length)
+merged_data <- merge(word_counts, death_counts, by = "movie")
+colnames(merged_data) <- c("Film", "Przekleństwa", "Śmierci")
+print(merged_data, row.names = FALSE)
+```
+
+Na podstawie tabeli można obliczyć współczynnik korelacji:
+
+```{r, echo=FALSE}
+correlation <- cor(merged_data$Przekleństwa, merged_data$Śmierci)
+print(correlation)
+```
+
+Trzeba też wykonać test sprawdzajączy, czy zmienne sa skorelowane:
+
+Hipoteza zerowa: $\rho$ = 0\newline
+Hipoteza alternatywna: $\rho$ $\neq$ 0
+
+Używamy statystyki t z pięcioma stopniami swobody:
+
+\[ T_{n-2} = \frac{r_{xy}}{\sqrt{1-r_{xy}^2}}\sqrt{n-2}\]
+
+czego wynikiem jest:
+
+```{r, echo=FALSE}
+result <- cor.test(death_counts$type,word_counts$type)
+print(result)
+```
+
+Według testu nie ma statystycznie istotnej podstawy do odrzucenia hipotezy zerowej. Istnieje jednak jakaś nieistotna korelacja wskazująca, że im więcej przekleństw, tym mniej śmierci. Można ją zobaczyc na wykresie:
+
+```{r, echo=FALSE}
+ggplot(merged_data, aes(x = Przekleństwa, y = Śmierci)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  xlab("Przekleństwa") +
+  ylab("Śmierci")
+```
+
+## Hipoteza 2: "W drugim akcie występuje najmniej przekleństw."
+
+```{r, echo=FALSE}
+word_data <- subset(data, type == "word")
+max_minutes_words <- word_data %>%
+  group_by(movie) %>%
+  summarize(max_minutes_in = max(minutes_in))
+word_data <- word_data %>%
+  left_join(max_minutes_words, by = "movie") %>%
+  mutate(scaled_minutes_in = minutes_in / max_minutes_in)
+intervals <- c(0, 0.35, 0.65, 1)
+table_data <- word_data %>%
+  mutate(interval = cut(scaled_minutes_in, breaks = intervals, labels = FALSE, include.lowest = TRUE)) %>%
+  group_by(movie, interval) %>%
+  summarize(words_count = n(), .groups = "drop")
+pivoted_table <- tidyr::pivot_wider(table_data, names_from = interval, values_from = words_count, values_fill = 0)
+
+
+```
+
+Poniższa tabela pokazuje ilość przekleństw w każdym akcie filmów:
+
+```{r, echo=FALSE}
+important_lines <- pivoted_table[, c("movie", "1", "2", "3")]
+important_lines
+```
+
+W celu sprawdzenia hipotezy trzeba wykonać dwa testy.
+
+Test pierwszy:
+
+Hipoteza zerowa: „Ilość przekleństw w pierwszym akcie jest równa lub mniejsza, niż w akcie drugim.”\newline
+Hipoteza alternatywna: „Ilość przekleństw w pierwszym akcie jest większa, niż w akcie drugim.”\newline
+Poziom istotności:	$\alpha$ = 0.05\newline
+Test t dla dwóch próbek:
+
+```{r, echo=FALSE}
+result <- t.test(pivoted_table$"1", pivoted_table$"2", alternative = "greater", paired = FALSE)
+print(result)
+```
+
+Podsumowując, na podstawie wyników testu t, nie mamy wystarczających dowodów, aby stwierdzić, że istnieje statystycznie istotna różnica między średnimi ilości przekleństw w pierwszym akcie a drugim akcie.
+
+Test drugi:
+
+Hipoteza zerowa: „Ilość przekleństw w trzecim akcie jest równa lub mniejsza, niż w akcie drugim.”\newline
+Hipoteza alternatywna: „Ilość przekleństw w trzecim akcie jest większa, niż w akcie drugim.”\newline
+Poziom istotności:	$\alpha$ = 0.05\newline
+Test t dla dwóch próbek:
+
+```{r, echo=FALSE}
+result <- t.test(pivoted_table$"3", pivoted_table$"2", alternative = "greater", paired = FALSE)
+print(result)
+```
+
+Podsumowując, na podstawie wyników testu t, nie mamy wystarczających dowodów, aby stwierdzić, że istnieje statystycznie istotna różnica między średnimi ilości przekleństw w akcie 3 a akcie 2.
+
+Na podstawie obu testów nie można potwierdzić postawionej hipotezy.
+
+Na koniec można spojrzeć na wykres, wyraźnie widać na nim podział na akty:
+
+```{r, echo=FALSE}
+word_data <- subset(data, type == "word")
+max_minutes_words <- word_data %>%
+  group_by(movie) %>%
+  summarize(max_minutes_in = max(minutes_in))
+word_data <- word_data %>%
+  left_join(max_minutes_words, by = "movie") %>%
+  mutate(scaled_minutes_in = minutes_in / max_minutes_in)
+summary_data <- word_data %>%
+  mutate(scaled_minutes_in_interval = cut(scaled_minutes_in, breaks = seq(0, 1, by = 0.05), include.lowest = TRUE)) %>%
+  group_by(scaled_minutes_in_interval) %>%
+  summarize(count = n())
+ggplot(summary_data, aes(x = scaled_minutes_in_interval, y = count)) +
+  geom_col(fill = "blue") +
+  labs(x = "Minuta filmu (scaled)", y = "Liczba Przekleństw") +
+  theme(legend.position = "none",axis.text.x = element_text(angle = 90, hjust = 1))
+word_data <- subset(data, type == "word")
+```
